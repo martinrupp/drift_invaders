@@ -486,6 +486,7 @@ function playback()
 
 // playback();
 restart();
+// 
 
 gamepad.addListener( [ KeyCodes.SPACE, [0, GamePadCode.BUTTON_RIGHT] ], 300, 100, (button) => { player.shoot(); } );
 
