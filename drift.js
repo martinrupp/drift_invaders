@@ -51,6 +51,10 @@ function add(v, v2) {
 	return {x: v.x+v2.x, y: v.y+v2.y}
 }
 
+function dot(v, v2) {
+	return v.x*v2.x + v.y*v2.y;
+}
+
 var lost_won = 0;
 function draw()
 {
@@ -172,34 +176,45 @@ class Missle
 }
 var num_enemies = 0;
 
-// this is an iteration algorithm to determine where we need to shoot
-// the iteration "cheats" on the speed of the bullet, and adjusts the time until
-// we are correct.
-function calculateShootingAngle(pos, speed) {
+// see http://playtechs.blogspot.com/2007/04/aiming-at-moving-target.html
+function calculateShootingAngle(pos, missileSpeed) {
 
-	var v = normalize(sub(player.pos, pos));
-	let mypos = add(pos, mult(v, 10));
+	var P = sub(player.pos, pos)
+	var V = player.vel;
+	var s = missileSpeed;
+	// playerDistance(t) = norm( P + V*t ) // distance from the turret
+	// now to be able to shoot hit the player at time t,
+	// the bullet must have the same from the turret
+	// missileDistance(t) = s*t
+	// playerDistance(t) = missileDistance(t)
+	// so we get
+	// norm( P + V*t ) = s * t
+	// square both sides
+	// dot(P, P) + 2( dot(P, V)) * t + dot(V, V) t^2 = s^2*t^2
+
+	// group by powers of t:
+	// (dot(V, V)- s^2)*t^2 + 2( dot(P, V)) * t + dot(P, P) = 0
 	
-	// our initial guess of the velocity is just "point in the direction of the player"
-	let vel = mult(v, speed)
-	// calculate our initial guess how much time the bullet takes to the player
-	const dpos = sub(mypos, player.pos);
-	let t = norm(dpos)/speed;
-	for(let i = 0; i<10; i++)
-	{
-		// where is the player in T seconds?
-		const playerInT = add(player.pos, mult(player.vel, t));
-		// update our shooting vector so we shoot there, in T seconds.
-		vel = mult(sub(playerInT, mypos), 1/t)
-		// calculate the speed of the shooting vector
-		const SP = norm(vel)
-		// SP might be higher or lower than the desired speed.
-		// if it's higher, it looks like we need more time,
-		// so update the time.
-		t *= SP/speed;
+	// -> quadratic equation
+
+	const a = dot(V, V)- s*s;
+	const b = 2*( dot(P, V))
+	const c = dot(P, P);
+
+	const D = b*b - 4*a*c;
+	if( D < 0 ) {
+		return; // no solution
 	}
-	return vel;
+	const sD = Math.sqrt(D);
+	const t1 = (-b + sD) / (2*a);
+	const t2 = (-b - sD) / (2*a);
+	const t = t2 > 0 ? t2 : t1;
+	const playerInT = add(player.pos, mult(player.vel, t));
+	const direction = sub(playerInT, pos);
+	return mult(direction, 1/t);
+
 }
+
 class Enemy
 {
 	constructor(pos)
@@ -234,7 +249,7 @@ class Enemy
 			// it's time to shoot!
 			var speed = 300;
 			let vel = calculateShootingAngle(this.pos, speed)
-			if( norm(vel) > 290 && norm(vel) < 310 )
+			if( vel )
 			{
 				enemyShootAudio.play();
 				objects.push(new Missle( {x: this.pos.x, y: this.pos.y}
@@ -283,7 +298,7 @@ class Player
 		if(lost_won) return;
 
 		const maxTurnConstant = 0.005;
-		const maxTrustConstant = 0.4;
+		const maxTrustConstant = 0.4; // 0.8 might be more fun
 		this.dalpha = 0;
 		this.thrust = 0;
 
